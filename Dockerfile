@@ -1,25 +1,28 @@
 FROM golang:1.21-alpine AS builder
+RUN apk add --no-cache git gcc musl-dev
 
-RUN apk add --no-cache git
 WORKDIR /app
 RUN git clone https://github.com/shazow/ssh-chat.git .
 
+# Compilação estática para garantir que rode em qualquer Linux
 RUN go mod download
-# Compila o binário no caminho correto
-RUN go build -o /ssh-chat ./cmd/ssh-chat/main.go || go build -o /ssh-chat .
+RUN CGO_ENABLED=0 go build -o /ssh-chat ./cmd/ssh-chat/main.go
 
 FROM alpine:latest
-RUN apk add --no-cache openssh-keygen
+# Instala o básico e cria um diretório limpo
+RUN apk add --no-cache openssh-keygen ca-certificates
+WORKDIR /chat
 
-WORKDIR /root/
+# Copia o binário do builder
 COPY --from=builder /ssh-chat .
+RUN chmod +x ./ssh-chat
 
-# --- ESTA É A LINHA QUE RESOLVE O ERRO ---
-RUN chmod +x /root/ssh-chat
-
+# Gera a chave de admin no diretório atual
 RUN ssh-keygen -t ed25519 -f id_ed25519 -N ""
 
+# Expõe a porta que o Koyeb vai usar
 ENV PORT=2222
+EXPOSE 2222
 
-# Usamos o caminho absoluto para não ter erro de diretório
-CMD ["/root/ssh-chat", "--bind", "0.0.0.0:2222", "--admin", "id_ed25519"]
+# Comando usando caminho relativo garantido
+CMD ["./ssh-chat", "--bind", "0.0.0.0:2222", "--admin", "id_ed25519"]
