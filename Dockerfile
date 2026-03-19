@@ -1,23 +1,28 @@
-# Estágio 1: Baixar o binário oficial
-FROM shazow/ssh-chat AS binary
-
-# Estágio 2: Sistema final
+# Usar uma imagem base leve do Debian
 FROM debian:bullseye-slim
 
-# Instalar dependências básicas
-RUN apt-get update && apt-get install -y python3 && rm -rf /var/lib/apt/lists/*
+# Instalar dependências necessárias: curl para baixar o chat e python3 para o health check
+RUN apt-get update && apt-get install -y \
+    curl \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copiar o executável do chat
-COPY --from=binary /ssh-chat /ssh-chat
+# Baixar o binário do ssh-chat diretamente do GitHub (Versão Linux 64-bit)
+RUN curl -L https://github.com/shazow/ssh-chat/releases/download/v1.10/ssh-chat-linux_amd64.tgz | tar xvz \
+    && mv /ssh-chat/ssh-chat /usr/local/bin/ssh-chat \
+    && chmod +x /usr/local/bin/ssh-chat
 
-# Criar um script para rodar o chat e um mini-servidor HTTP ao mesmo tempo
+# Criar o script de inicialização dupla
 RUN echo '#!/bin/bash\n\
+echo "Iniciando servidor de rotas na porta 8080..." \n\
 python3 -m http.server 8080 & \n\
-/ssh-chat --address 0.0.0.0:2022 --verbosity=debug' > /entrypoint.sh
+echo "Iniciando SSH-Chat na porta 2022..." \n\
+ssh-chat --address 0.0.0.0:2022 --verbosity=debug' > /entrypoint.sh
+
 RUN chmod +x /entrypoint.sh
 
-# Expor as duas portas
-EXPOSE 2022
+# Expor as portas necessárias
 EXPOSE 8080
+EXPOSE 2022
 
 ENTRYPOINT ["/entrypoint.sh"]
