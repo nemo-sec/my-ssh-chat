@@ -4,25 +4,22 @@ RUN apk add --no-cache git gcc musl-dev
 WORKDIR /app
 RUN git clone https://github.com/shazow/ssh-chat.git .
 
-# Compilação estática para garantir que rode em qualquer Linux
+# Baixa as dependências
 RUN go mod download
-RUN CGO_ENABLED=0 go build -o /ssh-chat ./cmd/ssh-chat/main.go
+
+# Tenta compilar buscando o arquivo main.go automaticamente em cmd/ ou na raiz
+RUN CGO_ENABLED=0 go build -o /ssh-chat $(find . -name "main.go" | head -n 1)
 
 FROM alpine:latest
-# Instala o básico e cria um diretório limpo
 RUN apk add --no-cache openssh-keygen ca-certificates
 WORKDIR /chat
 
-# Copia o binário do builder
 COPY --from=builder /ssh-chat .
 RUN chmod +x ./ssh-chat
 
-# Gera a chave de admin no diretório atual
+# Gera a chave do servidor
 RUN ssh-keygen -t ed25519 -f id_ed25519 -N ""
 
-# Expõe a porta que o Koyeb vai usar
-ENV PORT=2222
+# Garantimos que ele use a porta 2222
 EXPOSE 2222
-
-# Comando usando caminho relativo garantido
 CMD ["./ssh-chat", "--bind", "0.0.0.0:2222", "--admin", "id_ed25519"]
